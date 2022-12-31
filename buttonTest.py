@@ -4,10 +4,11 @@ import os
 
 bot = discord.Bot() # Create a bot object
 
-class MyView(discord.ui.View):
+@bot.event
+async def on_ready():
+    print(f'We have logged in as {bot.user}')
 
-    async def bruh():
-        print('bruh')
+class MyView(discord.ui.View):
 
     async def on_timeout(self):
         for child in self.children:
@@ -16,7 +17,7 @@ class MyView(discord.ui.View):
 
     @discord.ui.button(label="Button 1", row=0, style=discord.ButtonStyle.primary)
     async def first_button_callback(self, button, interaction):
-        await bruh()
+        await interaction.response.send_message("You pressed me!")
 
     @discord.ui.button(label="Button 2", row=1, style=discord.ButtonStyle.primary)
     async def second_button_callback(self, button, interaction):

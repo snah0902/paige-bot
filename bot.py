@@ -3,6 +3,7 @@ import requests
 import numpy.random as random
 import dotenv
 import os
+import asyncio
 
 def randomMangas(difficulty):
     base_url = "https://api.mangadex.org"
@@ -73,6 +74,9 @@ def randomPages(manga_id):
         )
 
         chapter_ids = [chapter["id"] for chapter in r.json()["data"]]
+        if len(chapter_ids) == 0:
+            print('No valid chapters, retrying...')
+            return None
         chapter_id = random.choice(chapter_ids)
 
         r = requests.get(f"{base_url}/at-home/server/{chapter_id}")
@@ -108,25 +112,17 @@ def randomImg(difficulty):
     return fullURLs, mangaTitles
 
 
-bot = discord.Bot()
+bot = discord.Bot(command_prefix='$')
 
 @bot.event
 async def on_ready():
     print(f'We have logged in as {bot.user}')
 
-@bot.slash_command()
-async def hello(ctx, name: str = None):
-    name = name or ctx.author.name
-    await ctx.respond(f"bruh {name}!")
-
 @bot.command(description="Sends the bot's latency.") # this decorator makes a slash command
 async def ping(ctx): # a slash command will be created with the name "ping"
     await ctx.respond(f"Pong! Latency is {bot.latency}")
 
-
-play = bot.create_group("play", "Generate random image")
-
-@bot.slash_command(description='Play an image game')
+@bot.command(description='Play an image game')
 @discord.option(
     "difficulty",
     description="Enter the difficulty",
@@ -152,6 +148,7 @@ async def pg(ctx, difficulty : str):
     )
     embed.set_image(url=fullURL)
     embed.set_footer(text=mangaTitles[0])
+    
     await ctx.respond(embed=embed)
 
 dotenv.load_dotenv()
