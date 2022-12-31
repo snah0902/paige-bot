@@ -132,6 +132,7 @@ async def ping(ctx): # a slash command will be created with the name "ping"
 async def pg(ctx, difficulty : str):
 
     fullURLs, mangaTitles = randomImg(difficulty)
+    print(mangaTitles)
     fullURL = fullURLs[0]
 
     if difficulty == 'easy':
