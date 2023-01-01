@@ -5,7 +5,7 @@ import dotenv
 import os
 import asyncio
 
-def randomMangas(difficulty):
+def randomMangas(offset):
     base_url = "https://api.mangadex.org"
 
     included_tag_names = []
@@ -27,17 +27,11 @@ def randomMangas(difficulty):
     ]
 
     order = {"rating": "desc", "followedCount": "desc"}
+    # order = {'followedCount': "desc"}
     final_order_query = dict()
     # { "order[rating]": "desc", "order[followedCount]": "desc" }
     for key, value in order.items():
         final_order_query[f"order[{key}]"] = value
-
-    if difficulty == 'easy':
-        offset = 0
-    elif difficulty == 'medium':
-        offset = 100
-    elif difficulty == 'hard':
-        offset = 200
 
     r = requests.get(
         f"{base_url}/manga",
@@ -131,6 +125,13 @@ async def on_ready():
 async def ping(ctx): # a slash command will be created with the name "ping"
     await ctx.respond(f"Pong! Latency is {bot.latency}")
 
+def shortenTitles(mangaTitles):
+    for i in range(len(mangaTitles)):
+        mangaTitle = mangaTitles[i]
+        if len(mangaTitle) > 80:
+            mangaTitles[i] = mangaTitle[:77] + '...'
+    return mangaTitles
+
 async def startEmbed(ctx):
     startEmbed = discord.Embed(
         title="Starting round in 5 seconds...",
@@ -138,13 +139,8 @@ async def startEmbed(ctx):
     )
     await ctx.send(embed=startEmbed)
 
-async def panelEmbed(ctx, difficulty, fullURL, mangaTitle):
-    if difficulty == 'easy':
-        description = "Random Page from Top 1-100 Manga"
-    elif difficulty == 'medium':
-        description = "Random Page from Top 101-200 Manga"
-    elif difficulty == 'hard':
-        description = "Random Page from Top 201-300 Manga"
+async def panelEmbed(ctx, offset, fullURL, mangaTitle):
+    description = f'Random Page from Top {offset+1}-{offset+101} Manga'
 
     panelEmbed = discord.Embed(
         title="Cap 1",
@@ -232,41 +228,41 @@ async def buttons(ctx, mangaTitles):
         async def fourth_button_callback(self, button, interaction):
             await self.buttonInteraction(button, interaction)
         
-    await ctx.send(view=MyView(timeout=15))
+    await ctx.send(view=MyView(timeout=10))
 
 serverGuildIDs = set()
 
 @bot.command(description='Play an image game')
 @discord.option(
-    "difficulty",
-    description="Enter the difficulty",
-    choices=['easy', 'medium', 'hard'],
-    default='easy')
+    "offset",
+    description="Enter the offset",
+    default=0,
+    min_value=0,
+    max_value=1000)
 
-async def pg(ctx, difficulty : str):
-    
+async def pg(ctx, offset : int):
+
     if ctx.guild.id in serverGuildIDs:
         await ctx.respond('A game is already in progress!')
         return
 
     serverGuildIDs.add(ctx.guild.id)
-    fullURLs, mangaTitles = randomImg(difficulty)
 
-    correctManga = mangaTitles[0]
-    fullURL = fullURLs[0]
+    try:
+        fullURLs, mangaTitles = randomImg(offset)
 
-    await startEmbed(ctx)
-    while True:
-        try:
-            await panelEmbed(ctx, difficulty, fullURL, correctManga)
-        except discord.errors.ApplicationCommandInvokeError:
-            print('Unknown error, retrying...')
-            await asyncio.sleep(1)
-            await panelEmbed(ctx, difficulty, fullURL, correctManga)
-        else:
-            break
+        mangaTitles = shortenTitles(mangaTitles)
+        correctManga = mangaTitles[0]
+        fullURL = fullURLs[0]
 
-    await buttons(ctx, mangaTitles)
+        await startEmbed(ctx)
+        await panelEmbed(ctx, offset, fullURL, correctManga)
+        await buttons(ctx, mangaTitles)
+
+    except:
+        serverGuildIDs.remove(ctx.guild.id)
+        await ctx.respond('Round failed, please try again!')
+
 
 dotenv.load_dotenv()
 token = str(os.getenv("TOKEN"))
