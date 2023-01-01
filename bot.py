@@ -57,7 +57,11 @@ def randomMangas(difficulty):
     mangas = random.choice(data, 4, replace=False)
     mangaTitles = []
     for manga in mangas:
-        mangaTitles.append(manga['attributes']['title'])
+        if 'en' in manga['attributes']['title']:
+            mangaTitle = manga['attributes']['title']['en']
+        else:
+            mangaTitle = manga['attributes']['title']['ja']
+        mangaTitles.append(mangaTitle)
     manga_id = mangas[0]['id']
 
     return manga_id, mangaTitles
@@ -91,7 +95,7 @@ def randomPages(manga_id):
         data = r_json["chapter"]["data"]
         # data_saver = r_json["chapter"]["dataSaver"]
 
-        if len(data) == 0:
+        if len(data) <= 1:
             print('Chapter has 0 pages, retrying...')
             return None
             
@@ -122,6 +126,32 @@ async def on_ready():
 async def ping(ctx): # a slash command will be created with the name "ping"
     await ctx.respond(f"Pong! Latency is {bot.latency}")
 
+async def startEmbed(ctx):
+    startEmbed = discord.Embed(
+        title="Starting round in 5 seconds...",
+        color=discord.Colour.yellow(),
+    )
+    await ctx.send(embed=startEmbed)
+
+async def panelEmbed(ctx, difficulty, fullURL, mangaTitle):
+    if difficulty == 'easy':
+        description = "Random Page from Top 1-100 Manga"
+    elif difficulty == 'medium':
+        description = "Random Page from Top 101-200 Manga"
+    elif difficulty == 'hard':
+        description = "Random Page from Top 201-300 Manga"
+
+    panelEmbed = discord.Embed(
+        title="Cap 1",
+        description=description,
+        color=discord.Colour.greyple(),
+    )
+    panelEmbed.set_image(url=fullURL)
+    # panelEmbed.set_footer(text=mangaTitle) # answer
+    await ctx.response.defer()
+    await asyncio.sleep(5)
+    await ctx.followup.send(embed=panelEmbed)
+
 @bot.command(description='Play an image game')
 @discord.option(
     "difficulty",
@@ -130,27 +160,100 @@ async def ping(ctx): # a slash command will be created with the name "ping"
     default='easy')
 
 async def pg(ctx, difficulty : str):
+    
 
     fullURLs, mangaTitles = randomImg(difficulty)
-    print(mangaTitles)
+
+    correctManga = mangaTitles[0]
     fullURL = fullURLs[0]
 
-    if difficulty == 'easy':
-        description = "Random Page from Top 1-100 Manga"
-    elif difficulty == 'medium':
-        description = "Random Page from Top 101-200 Manga"
-    elif difficulty == 'hard':
-        description = "Random Page from Top 201-300 Manga"
+    await startEmbed(ctx)
+    while True:
+        try:
+            await panelEmbed(ctx, difficulty, fullURL, correctManga)
+        except discord.errors.ApplicationCommandInvokeError:
+            print('Unknown error, retrying...')
+            await asyncio.sleep(1)
+            await panelEmbed(ctx, difficulty, fullURL, correctManga)
+        else:
+            break
 
-    embed = discord.Embed(
-        title="Cap 1",
-        description=description,
-        color=discord.Colour.blurple(), # Pycord provides a class with default colors you can choose from
-    )
-    embed.set_image(url=fullURL)
-    embed.set_footer(text=mangaTitles[0])
-    
-    await ctx.respond(embed=embed)
+    # button logic
+
+    correctManga = mangaTitles[0]
+    random.shuffle(mangaTitles)
+
+    lostPlayers = set()
+    isWinner = []
+
+    class MyView(discord.ui.View):
+
+        async def changeButtonColors(self, state, interaction=None):
+            for child in self.children:
+                child.disabled = True
+                if child.label != correctManga:
+                    child.style = discord.ButtonStyle.secondary
+                elif state == 'win':
+                    child.style = discord.ButtonStyle.success
+                elif state == 'loss':
+                    child.style = discord.ButtonStyle.danger
+            if state == 'win':
+                await self.gameWin(interaction)
+            elif state == 'loss':
+                await ctx.respond(f'No one got the correct answer! The correct answer was {correctManga}.')
+            await self.message.edit(view=self)
+
+        async def gameWin(self, interaction):
+            if isWinner != []:
+                await interaction.response.defer()
+            else:
+                isWinner.append(interaction.user)
+                await ctx.respond(f'{interaction.user} has won!')
+
+        async def buttonPressResponse(self, button, interaction):
+            # correct choice -- game ends
+            if button.label == correctManga:
+                await self.changeButtonColors('win', interaction)
+            # incorrect choice
+            else:
+                lostPlayers.add(interaction.user)
+                await interaction.response.send_message("Sorry, that is the wrong answer!", ephemeral=True)
+
+        async def on_timeout(self):
+            if isWinner != []:
+                return
+            await self.changeButtonColors('loss')
+            
+        async def repeatedButtonPress(self, interaction):
+            try:
+                await interaction.response.defer()
+            except discord.errors.InteractionResponded:
+                pass
+
+        async def buttonInteraction(self, button, interaction):
+            if interaction.user in lostPlayers or isWinner != []:
+                await self.repeatedButtonPress(interaction)
+            else:
+                await self.buttonPressResponse(button, interaction)
+                await self.repeatedButtonPress(interaction)
+
+        @discord.ui.button(label=mangaTitles[0], row=0, style=discord.ButtonStyle.primary)
+        async def first_button_callback(self, button, interaction):
+            await self.buttonInteraction(button, interaction)
+
+        @discord.ui.button(label=mangaTitles[1], row=1, style=discord.ButtonStyle.primary)
+        async def second_button_callback(self, button, interaction):
+            await self.buttonInteraction(button, interaction)
+
+        @discord.ui.button(label=mangaTitles[2], row=2, style=discord.ButtonStyle.primary)
+        async def third_button_callback(self, button, interaction):
+            await self.buttonInteraction(button, interaction)
+
+        @discord.ui.button(label=mangaTitles[3], row=3, style=discord.ButtonStyle.primary)
+        async def fourth_button_callback(self, button, interaction):
+            await self.buttonInteraction(button, interaction)
+        
+    await ctx.send(view=MyView(timeout=15))
 
 dotenv.load_dotenv()
 token = str(os.getenv("TOKEN"))
