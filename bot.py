@@ -59,8 +59,11 @@ def randomMangas(difficulty):
     for manga in mangas:
         if 'en' in manga['attributes']['title']:
             mangaTitle = manga['attributes']['title']['en']
-        else:
+        elif 'ja' in manga['attributes']['title']:
             mangaTitle = manga['attributes']['title']['ja']
+        else:
+            print('No english/japanese title, retrying...')
+            return (None, None)
         mangaTitles.append(mangaTitle)
     manga_id = mangas[0]['id']
 
@@ -109,6 +112,8 @@ def randomPages(manga_id):
 def randomImg(difficulty):
 
     manga_id, mangaTitles = randomMangas(difficulty)
+    while manga_id == None:
+        manga_id, mangaTitles = randomMangas(difficulty)
     fullURLs = randomPages(manga_id)
     while fullURLs == None:
         manga_id, mangaTitles = randomMangas(difficulty)
@@ -152,37 +157,9 @@ async def panelEmbed(ctx, difficulty, fullURL, mangaTitle):
     await asyncio.sleep(5)
     await ctx.followup.send(embed=panelEmbed)
 
-@bot.command(description='Play an image game')
-@discord.option(
-    "difficulty",
-    description="Enter the difficulty",
-    choices=['easy', 'medium', 'hard'],
-    default='easy')
-
-async def pg(ctx, difficulty : str):
-    
-
-    fullURLs, mangaTitles = randomImg(difficulty)
-
-    correctManga = mangaTitles[0]
-    fullURL = fullURLs[0]
-
-    await startEmbed(ctx)
-    while True:
-        try:
-            await panelEmbed(ctx, difficulty, fullURL, correctManga)
-        except discord.errors.ApplicationCommandInvokeError:
-            print('Unknown error, retrying...')
-            await asyncio.sleep(1)
-            await panelEmbed(ctx, difficulty, fullURL, correctManga)
-        else:
-            break
-
-    # button logic
-
+async def buttons(ctx, mangaTitles):
     correctManga = mangaTitles[0]
     random.shuffle(mangaTitles)
-
     lostPlayers = set()
     isWinner = []
 
@@ -198,8 +175,10 @@ async def pg(ctx, difficulty : str):
                 elif state == 'loss':
                     child.style = discord.ButtonStyle.danger
             if state == 'win':
+                serverGuildIDs.remove(ctx.guild.id)
                 await self.gameWin(interaction)
             elif state == 'loss':
+                serverGuildIDs.remove(ctx.guild.id)
                 await ctx.respond(f'No one got the correct answer! The correct answer was {correctManga}.')
             await self.message.edit(view=self)
 
@@ -254,6 +233,40 @@ async def pg(ctx, difficulty : str):
             await self.buttonInteraction(button, interaction)
         
     await ctx.send(view=MyView(timeout=15))
+
+serverGuildIDs = set()
+
+@bot.command(description='Play an image game')
+@discord.option(
+    "difficulty",
+    description="Enter the difficulty",
+    choices=['easy', 'medium', 'hard'],
+    default='easy')
+
+async def pg(ctx, difficulty : str):
+    
+    if ctx.guild.id in serverGuildIDs:
+        await ctx.respond('A game is already in progress!')
+        return
+
+    serverGuildIDs.add(ctx.guild.id)
+    fullURLs, mangaTitles = randomImg(difficulty)
+
+    correctManga = mangaTitles[0]
+    fullURL = fullURLs[0]
+
+    await startEmbed(ctx)
+    while True:
+        try:
+            await panelEmbed(ctx, difficulty, fullURL, correctManga)
+        except discord.errors.ApplicationCommandInvokeError:
+            print('Unknown error, retrying...')
+            await asyncio.sleep(1)
+            await panelEmbed(ctx, difficulty, fullURL, correctManga)
+        else:
+            break
+
+    await buttons(ctx, mangaTitles)
 
 dotenv.load_dotenv()
 token = str(os.getenv("TOKEN"))

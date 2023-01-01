@@ -29,7 +29,6 @@ async def buttons(ctx):
                     child.style = discord.ButtonStyle.success
                 elif state == 'loss':
                     child.style = discord.ButtonStyle.danger
-            print(self)
             await self.message.edit(view=self)
 
         async def gameWin(self, interaction):
