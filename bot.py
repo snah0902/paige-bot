@@ -4,6 +4,7 @@ import numpy.random as random
 import dotenv
 import os
 import asyncio
+import json
 
 def randomMangas(offset):
     base_url = "https://api.mangadex.org"
@@ -115,7 +116,7 @@ def randomImg(difficulty):
     return fullURLs, mangaTitles
 
 
-bot = discord.Bot(command_prefix='$')
+bot = discord.Bot()
 
 @bot.event
 async def on_ready():
@@ -125,6 +126,7 @@ async def on_ready():
 async def ping(ctx): # a slash command will be created with the name "ping"
     await ctx.respond(f"Pong! Latency is {bot.latency}")
 
+# parsing manga titles that are > 80 characters
 def shortenTitles(mangaTitles):
     for i in range(len(mangaTitles)):
         mangaTitle = mangaTitles[i]
@@ -148,7 +150,7 @@ async def panelEmbed(ctx, offset, fullURL, mangaTitle):
         color=discord.Colour.greyple(),
     )
     panelEmbed.set_image(url=fullURL)
-    # panelEmbed.set_footer(text=mangaTitle) # answer
+    # panelEmbed.set_footer(text=mangaTitle)  # putting correct manga as embed footer
     await ctx.response.defer()
     await asyncio.sleep(5)
     await ctx.followup.send(embed=panelEmbed)
@@ -171,22 +173,24 @@ async def buttons(ctx, mangaTitles):
                 elif state == 'loss':
                     child.style = discord.ButtonStyle.danger
             if state == 'win':
-                serverGuildIDs.remove(ctx.guild.id)
-                await self.gameWin(interaction)
+                setRoundOutOfProgress(ctx)
+                await self.roundWin(interaction)
             elif state == 'loss':
-                serverGuildIDs.remove(ctx.guild.id)
+                setRoundOutOfProgress(ctx)
                 await ctx.respond(f'No one got the correct answer! The correct answer was {correctManga}.')
             await self.message.edit(view=self)
 
-        async def gameWin(self, interaction):
+        async def roundWin(self, interaction):
             if isWinner != []:
                 await interaction.response.defer()
             else:
                 isWinner.append(interaction.user)
-                await ctx.respond(f'{interaction.user} has won!')
+                updateScore(interaction)
+                username = str(interaction.user)[:-5]
+                await ctx.respond(f'{username} has won!')
 
         async def buttonPressResponse(self, button, interaction):
-            # correct choice -- game ends
+            # correct choice -- round ends
             if button.label == correctManga:
                 await self.changeButtonColors('win', interaction)
             # incorrect choice
@@ -230,9 +234,53 @@ async def buttons(ctx, mangaTitles):
         
     await ctx.send(view=MyView(timeout=10))
 
-serverGuildIDs = set()
+def isRoundInProgress(ctx):
+    with open('data.json') as f:
+        data = json.load(f)
 
-@bot.command(description='Play an image game')
+    isRoundInProgress = ctx.guild.id in data["playingGuilds"]
+    f.close()
+    return isRoundInProgress
+
+def setRoundInProgress(ctx):
+    with open('data.json') as f:
+        data = json.load(f)
+
+    data["playingGuilds"].append(ctx.guild.id)
+
+    with open('data.json', 'w') as f:
+        json.dump(data, f, indent=4)
+    
+    f.close()
+
+def setRoundOutOfProgress(ctx):
+    with open('data.json') as f:
+        data = json.load(f)
+
+    if ctx.guild.id in data["playingGuilds"]:
+        data["playingGuilds"].remove(ctx.guild.id)
+
+    with open('data.json', 'w') as f:
+        json.dump(data, f, indent=4)
+    
+    f.close()
+
+def updateScore(interaction):
+    with open('data.json') as f:
+        data = json.load(f)
+
+    user = str(interaction.user)
+    if user not in data["score"]:
+        data["score"][user] = 1
+    else:
+        data["score"][user] += 1
+
+    with open('data.json', 'w') as f:
+        json.dump(data, f, indent=4)
+    
+    f.close()
+
+@bot.command(description='Play a manga guessing game.')
 @discord.option(
     "offset",
     description="Enter the offset",
@@ -242,11 +290,11 @@ serverGuildIDs = set()
 
 async def pg(ctx, offset : int):
 
-    if ctx.guild.id in serverGuildIDs:
-        await ctx.respond('A game is already in progress!')
+    if isRoundInProgress(ctx):
+        await ctx.respond('A round is already in progress!')
         return
 
-    serverGuildIDs.add(ctx.guild.id)
+    setRoundInProgress(ctx)
 
     try:
         fullURLs, mangaTitles = randomImg(offset)
@@ -260,9 +308,28 @@ async def pg(ctx, offset : int):
         await buttons(ctx, mangaTitles)
 
     except:
-        serverGuildIDs.remove(ctx.guild.id)
-        await ctx.respond('Round failed, please try again!')
+        setRoundOutOfProgress(ctx)
 
+@bot.command(description="Forcefully stops the current round. Only use if bot is softlocked.")
+async def forcestop(ctx):
+    setRoundOutOfProgress(ctx)
+    await ctx.respond(f'Current round has forcefully been stopped.')
+
+@bot.command(description="Sends user's current score.")
+async def score(ctx):
+    with open('data.json') as f:
+        data = json.load(f)
+    
+    user = str(ctx.user)
+
+    if user not in data["score"]:
+        f.close()
+        await ctx.respond(f"{user[:-5]} has gotten 0 manga correct!")
+
+    else:
+        score = data["score"][user]
+        f.close()
+        await ctx.respond(f"{user[:-5]} has gotten {score} manga correct!")
 
 dotenv.load_dotenv()
 token = str(os.getenv("TOKEN"))
