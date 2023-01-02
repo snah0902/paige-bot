@@ -139,21 +139,22 @@ async def startEmbed(ctx):
         title="Starting round in 5 seconds...",
         color=discord.Colour.yellow(),
     )
-    await ctx.send(embed=startEmbed)
+    await ctx.respond(embed=startEmbed)
+
+numberOfGames = 0
 
 async def panelEmbed(ctx, offset, fullURL, mangaTitle):
     description = f'Random Page from Top {offset+1}-{offset+101} Manga'
-
     panelEmbed = discord.Embed(
         title="Cap 1",
         description=description,
         color=discord.Colour.greyple(),
     )
+
     panelEmbed.set_image(url=fullURL)
-    # panelEmbed.set_footer(text=mangaTitle)  # putting correct manga as embed footer
-    await ctx.response.defer()
     await asyncio.sleep(5)
-    await ctx.followup.send(embed=panelEmbed)
+    # panelEmbed.set_footer(text=mangaTitle)  # putting correct manga as embed footer
+    await ctx.respond(embed=panelEmbed)
 
 async def buttons(ctx, mangaTitles):
     correctManga = mangaTitles[0]
@@ -297,18 +298,21 @@ async def pg(ctx, offset : int):
     setRoundInProgress(ctx)
 
     try:
+        await startEmbed(ctx)
+
         fullURLs, mangaTitles = randomImg(offset)
 
         mangaTitles = shortenTitles(mangaTitles)
         correctManga = mangaTitles[0]
         fullURL = fullURLs[0]
 
-        await startEmbed(ctx)
+        
         await panelEmbed(ctx, offset, fullURL, correctManga)
         await buttons(ctx, mangaTitles)
 
     except:
         setRoundOutOfProgress(ctx)
+        print('Error occurred, please try again.')
 
 @bot.command(description="Forcefully stops the current round. Only use if bot is softlocked.")
 async def forcestop(ctx):
@@ -330,6 +334,38 @@ async def score(ctx):
         score = data["score"][user]
         f.close()
         await ctx.respond(f"{user[:-5]} has gotten {score} manga correct!")
+
+@bot.command(description="Sends top players.")
+async def top(ctx):
+
+    leaderboardEmbed = discord.Embed(
+            title="Top Players",
+            color=discord.Colour.blurple(),
+        )
+
+    with open('data.json') as f:
+        data = json.load(f)
+
+    leaderboardList = []
+
+    for user in data["score"]:
+        score = data["score"][user]
+        leaderboardList.append((score, user))
+
+    leaderboardList.sort(reverse = True)
+
+    leaderboard = ""
+    for i in range(10):
+        if i < len(leaderboardList):
+            score, user = leaderboardList[i]
+            leaderboard += f"\n`{i+1}` {user[:-5]} `{score}`"
+        else:
+            leaderboard += f"\n`{i+1}` N/A `0`"
+
+    f.close()
+
+    leaderboardEmbed.add_field(name='Players', value=leaderboard)
+    await ctx.respond(embed=leaderboardEmbed)
 
 dotenv.load_dotenv()
 token = str(os.getenv("TOKEN"))
