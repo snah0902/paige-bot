@@ -5,8 +5,9 @@ import dotenv
 import os
 import asyncio
 import json
+from PIL import Image
 
-def randomMangas(offset):
+def randomMangas(difficulty):
     base_url = "https://api.mangadex.org"
 
     included_tag_names = []
@@ -34,33 +35,43 @@ def randomMangas(offset):
     for key, value in order.items():
         final_order_query[f"order[{key}]"] = value
 
-    r = requests.get(
-        f"{base_url}/manga",
-        params={
-            **{
-                "limit": 100,
-                "offset": offset,
-                "includedTags[]": included_tag_ids,
-                "excludedTags[]": excluded_tag_ids,
-                "originalLanguage[]": ["ja"],
-            },
-            **final_order_query,
-        },
-    )
-
-    data = r.json()['data']
-    mangas = random.choice(data, 4, replace=False)
     mangaTitles = []
-    for manga in mangas:
+    for i in range(4):
+
+        startOffset = (difficulty-1)*250
+        endOffset = difficulty*250
+        offset = random.randint(startOffset, endOffset)
+
+        r = requests.get(
+            f"{base_url}/manga",
+            params={
+                **{
+                    "limit": 1,
+                    "offset": offset,
+                    "includedTags[]": included_tag_ids,
+                    "excludedTags[]": excluded_tag_ids,
+                    "originalLanguage[]": ["ja"],
+                },
+                **final_order_query,
+            },
+        )
+
+        data = r.json()['data']
+        manga = data[0]
+        
         if 'en' in manga['attributes']['title']:
             mangaTitle = manga['attributes']['title']['en']
         elif 'ja' in manga['attributes']['title']:
             mangaTitle = manga['attributes']['title']['ja']
+        elif 'ko' in manga['attributes']['title']:
+            mangaTitle = manga['attributes']['title']['ko']
         else:
-            print('No english/japanese title, retrying...')
+            print('No valid title, retrying...')
             return (None, None)
         mangaTitles.append(mangaTitle)
-    manga_id = mangas[0]['id']
+        
+        if i == 0:
+            manga_id = manga['id']
 
     return manga_id, mangaTitles
 
@@ -120,6 +131,7 @@ bot = discord.Bot()
 
 @bot.event
 async def on_ready():
+    setAllRoundsOutOfProgress()
     print(f'We have logged in as {bot.user}')
 
 @bot.command(description="Sends the bot's latency.") # this decorator makes a slash command
@@ -134,17 +146,36 @@ def shortenTitles(mangaTitles):
             mangaTitles[i] = mangaTitle[:77] + '...'
     return mangaTitles
 
-async def startEmbed(ctx):
+# returns difficulty name given difficulty
+def difficultyName(difficulty):
+    if difficulty == 1:
+        return 'Easy'
+    elif difficulty == 2:
+        return 'Normal'
+    elif difficulty == 3:
+        return 'Hard'
+    elif difficulty == 4:
+        return 'Harder'
+    elif difficulty == 5:
+        return 'Insane'
+
+
+async def startEmbed(ctx, difficulty):
     startEmbed = discord.Embed(
-        title="Starting round in 5 seconds...",
+        title="Starting round in 3 seconds...",
         color=discord.Colour.yellow(),
     )
+    difficultyLevel = difficultyName(difficulty)
+
+    startEmbed.add_field(name='Settings', value=f'Difficulty: **{difficultyLevel}**')
+
     await ctx.respond(embed=startEmbed)
 
 numberOfGames = 0
 
-async def panelEmbed(ctx, offset, fullURL, mangaTitle):
-    description = f'Random Page from Top {offset+1}-{offset+101} Manga'
+async def panelEmbed(ctx, difficulty, fullURL, mangaTitle):
+    startingManga = (difficulty-1)*250+1
+    description = f'Random Page from Top {startingManga}-{startingManga+250} Manga'
     panelEmbed = discord.Embed(
         title="Cap 1",
         description=description,
@@ -152,7 +183,7 @@ async def panelEmbed(ctx, offset, fullURL, mangaTitle):
     )
 
     panelEmbed.set_image(url=fullURL)
-    await asyncio.sleep(5)
+    await asyncio.sleep(3)
     # panelEmbed.set_footer(text=mangaTitle)  # putting correct manga as embed footer
     await ctx.respond(embed=panelEmbed)
 
@@ -266,6 +297,17 @@ def setRoundOutOfProgress(ctx):
     
     f.close()
 
+def setAllRoundsOutOfProgress():
+    with open('data.json') as f:
+        data = json.load(f)
+
+    data["playingGuilds"] = []
+
+    with open('data.json', 'w') as f:
+        json.dump(data, f, indent=4)
+    
+    f.close()
+
 def updateScore(interaction):
     with open('data.json') as f:
         data = json.load(f)
@@ -283,13 +325,13 @@ def updateScore(interaction):
 
 @bot.command(description='Play a manga guessing game.')
 @discord.option(
-    "offset",
-    description="Enter the offset",
-    default=0,
-    min_value=0,
-    max_value=1000)
+    "difficulty",
+    description="Enter the difficulty",
+    default=1,
+    min_value=1,
+    max_value=5)
 
-async def pg(ctx, offset : int):
+async def pg(ctx, difficulty : int):
 
     if isRoundInProgress(ctx):
         await ctx.respond('A round is already in progress!')
@@ -297,22 +339,22 @@ async def pg(ctx, offset : int):
 
     setRoundInProgress(ctx)
 
-    try:
-        await startEmbed(ctx)
+    # try:
+    await startEmbed(ctx, difficulty)
 
-        fullURLs, mangaTitles = randomImg(offset)
+    fullURLs, mangaTitles = randomImg(difficulty)
 
-        mangaTitles = shortenTitles(mangaTitles)
-        correctManga = mangaTitles[0]
-        fullURL = fullURLs[0]
+    mangaTitles = shortenTitles(mangaTitles)
+    correctManga = mangaTitles[0]
+    fullURL = fullURLs[0]
 
-        
-        await panelEmbed(ctx, offset, fullURL, correctManga)
-        await buttons(ctx, mangaTitles)
+    
+    await panelEmbed(ctx, difficulty, fullURL, correctManga)
+    await buttons(ctx, mangaTitles)
 
-    except:
-        setRoundOutOfProgress(ctx)
-        print('Error occurred, please try again.')
+    # except:
+    setRoundOutOfProgress(ctx)
+    # print('Error occurred, please try again.')
 
 @bot.command(description="Forcefully stops the current round. Only use if bot is softlocked.")
 async def forcestop(ctx):
