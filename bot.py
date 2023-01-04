@@ -112,7 +112,6 @@ def randomPages(manga_id):
         
         fullURL = f'{host}/data/{chapter_hash}/{data[randomPageIdx]}'
         fullURLs.append(fullURL)
-
     return fullURLs
 
 def randomImg(difficulty):
