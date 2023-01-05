@@ -75,6 +75,29 @@ def randomMangas(difficulty):
 
     return manga_id, mangaTitles
 
+
+def randomMangaWithMAL(malUsers):
+
+    with open('data.json') as f:
+        data = json.load(f)
+
+    mdexLst = []
+    for username in malUsers:
+        mdexLst.extend(data['mal'][username])
+
+    mdexLstIdxes = random.choice(len(mdexLst), 4, replace=False)
+
+    mangaTitles = []
+    for i in range(4):
+        manga_id, mangaTitle = mdexLst[mdexLstIdxes[i]]
+        mangaTitles.append(mangaTitle)
+
+        if i == 0:
+            correct_manga_id = manga_id
+
+    f.close()
+    return correct_manga_id, mangaTitles
+
 def randomPages(manga_id):
 
     fullURLs = []
@@ -114,16 +137,24 @@ def randomPages(manga_id):
         fullURLs.append(fullURL)
     return fullURLs
 
-def randomImg(difficulty):
+def randomImg(difficulty, malUsers):
 
-    manga_id, mangaTitles = randomMangas(difficulty)
-    while manga_id == None:
-        manga_id, mangaTitles = randomMangas(difficulty)
-    fullURLs = randomPages(manga_id)
-    while fullURLs == None:
-        manga_id, mangaTitles = randomMangas(difficulty)
+    if malUsers != []:
+        manga_id, mangaTitles = randomMangaWithMAL(malUsers)
         fullURLs = randomPages(manga_id)
-    return fullURLs, mangaTitles
+        while fullURLs == None:
+            manga_id, mangaTitles = randomMangaWithMAL(malUsers)
+            fullURLs = randomPages(manga_id)
+        return fullURLs, mangaTitles
+    else:
+        manga_id, mangaTitles = randomMangas(difficulty)
+        while manga_id == None:
+            manga_id, mangaTitles = randomMangas(difficulty)
+        fullURLs = randomPages(manga_id)
+        while fullURLs == None:
+            manga_id, mangaTitles = randomMangas(difficulty)
+            fullURLs = randomPages(manga_id)
+        return fullURLs, mangaTitles
 
 
 bot = discord.Bot()
@@ -159,25 +190,29 @@ def difficultyName(difficulty):
         return 'Insane'
 
 
-async def startEmbed(ctx, difficulty):
+async def startEmbed(ctx, difficulty, malUsers):
     startEmbed = discord.Embed(
         title="Starting round in 3 seconds...",
         color=discord.Colour.yellow(),
     )
     difficultyLevel = difficultyName(difficulty)
 
-    startEmbed.add_field(name='Settings', value=f'Difficulty: **{difficultyLevel}**')
+    if malUsers == []:
+        value = f'Difficulty: **{difficultyLevel}**'
+    else:
+        value = f'From **{",".join(malUsers)}** MyAnimeList list(s)'
+
+
+    startEmbed.add_field(name='Settings', value=value)
 
     await ctx.respond(embed=startEmbed)
 
 numberOfGames = 0
 
 async def panelEmbed(ctx, difficulty, fullURL, mangaTitle):
-    startingManga = (difficulty-1)*250+1
-    description = f'Random Page from Top {startingManga}-{startingManga+250} Manga'
     panelEmbed = discord.Embed(
-        title="Cap 1",
-        description=description,
+        title="Random Manga Panel",
+        description="Guess the correct manga!",
         color=discord.Colour.greyple(),
     )
 
@@ -322,6 +357,31 @@ def updateScore(interaction):
     
     f.close()
 
+def checkForValidMALs(ctx, myAnimeLists):
+
+    with open('data.json') as f:
+        data = json.load(f)
+
+    malLists = myAnimeLists.split(',')
+    for i in range(len(malLists)):
+        username = malLists[i].strip()
+
+        if username not in data['mal']:
+            
+            f.close()
+            return ('No user', username)
+        mdexLst = data['mal'][username]
+
+        if len(mdexLst) < 4:
+            
+            f.close()
+            return ('Not enough manga', username)
+
+        malLists[i] = username
+
+    f.close()
+    return malLists
+
 @bot.command(description='Play a manga guessing game.')
 @discord.option(
     "difficulty",
@@ -329,8 +389,13 @@ def updateScore(interaction):
     default=1,
     min_value=1,
     max_value=5)
+@discord.option(
+    "mal",
+    description="MyAnimeList usernames (seperated by commas)",
+    default="",
+)
 
-async def pg(ctx, difficulty : int):
+async def pg(ctx, difficulty : int, mal : str):
 
     if isRoundInProgress(ctx):
         await ctx.respond('A round is already in progress!')
@@ -338,22 +403,36 @@ async def pg(ctx, difficulty : int):
 
     setRoundInProgress(ctx)
 
-    # try:
-    await startEmbed(ctx, difficulty)
+    malUsers = []
+    if mal != "":
+        malUsers = checkForValidMALs(ctx, mal)
+        if isinstance(malUsers, tuple):
+            error, username = malUsers
+            if error == 'No user':
+                await ctx.respond(f"{username}'s list on MyAnimeList has not been synced yet. Use the `sync` command to syncronize the list.")
+                setRoundOutOfProgress(ctx)
+                return
+            elif error == 'Not enough manga':
+                await ctx.respond(f"{username}'s list does not have enough manga!")
+                setRoundOutOfProgress(ctx)
+                return
 
-    fullURLs, mangaTitles = randomImg(difficulty)
+    try:
+        await startEmbed(ctx, difficulty, malUsers)
 
-    mangaTitles = shortenTitles(mangaTitles)
-    correctManga = mangaTitles[0]
-    fullURL = fullURLs[0]
+        fullURLs, mangaTitles = randomImg(difficulty, malUsers)
 
-    
-    await panelEmbed(ctx, difficulty, fullURL, correctManga)
-    await buttons(ctx, mangaTitles)
+        mangaTitles = shortenTitles(mangaTitles)
+        correctManga = mangaTitles[0]
+        fullURL = fullURLs[0]
 
-    # except:
-    setRoundOutOfProgress(ctx)
-    # print('Error occurred, please try again.')
+        
+        await panelEmbed(ctx, difficulty, fullURL, correctManga)
+        await buttons(ctx, mangaTitles)
+
+    except:
+        setRoundOutOfProgress(ctx)
+        print('Error occurred, please try again.')
 
 @bot.command(description="Forcefully stops the current round. Only use if bot is softlocked.")
 async def forcestop(ctx):
@@ -408,6 +487,88 @@ async def top(ctx):
     leaderboardEmbed.add_field(name='Players', value=leaderboard)
     await ctx.respond(embed=leaderboardEmbed)
 
+def myAnimeListRequest(mangaTitles, username, status):
+    url = f'https://api.myanimelist.net/v2/users/{username}/mangalist?offset=0&limit=1000&status={status}'
+
+    r = requests.get(url, headers = {'X-MAL-CLIENT-ID': CLIENT_ID})
+
+    if 'data' not in r.json():
+        return None
+
+    mangaList = r.json()['data']
+
+    if 'error' in mangaList:
+        return None
+
+    for manga in mangaList:
+        mangaTitle = manga['node']['title']
+        mangaTitles.append(mangaTitle)
+
+    return mangaTitles
+
+@bot.command()
+async def sync(ctx, username : str):
+    await ctx.respond('The bot will DM you when sync is complete!')
+    mangaTitles=[]
+    mangaTitles = myAnimeListRequest(mangaTitles, username, 'reading')
+    if mangaTitles == None:
+        await ctx.respond(f'{username} is not a valid username on MyAnimeList.')
+        return
+    mangaTitles = myAnimeListRequest(mangaTitles, username, 'completed')
+    if mangaTitles == None:
+        await ctx.respond(f'{username} is not a valid username on MyAnimeList.')
+        return 
+
+    base_url = "https://api.mangadex.org"
+    final_order_query = {'order[relevance]': 'desc'}
+
+    mdexLst = []
+    for i in range(len(mangaTitles)):
+
+        mangaTitle = mangaTitles[i]
+        r = requests.get(
+            f"{base_url}/manga",
+            params={
+                **{
+                    "limit": 1,
+                    "title": mangaTitle,
+                },
+                **final_order_query,
+                },
+        )
+
+        data = r.json()["data"]
+        if data == []:
+            continue
+        manga = data[0]
+        if manga['attributes']['originalLanguage'] != 'ja':
+            continue
+        manga_id = manga['id']
+        if 'en' in manga['attributes']['title']:
+            mangaTitle = manga['attributes']['title']['en']
+        elif 'ja' in manga['attributes']['title']:
+            mangaTitle = manga['attributes']['title']['ja']
+        elif 'ko' in manga['attributes']['title']:
+            mangaTitle = manga['attributes']['title']['ko']
+        else:
+            continue
+
+        mdexLst.append((manga_id, mangaTitle))
+
+    with open('data.json') as f:
+        data = json.load(f)
+
+    data['mal'][username] = mdexLst
+
+    with open('data.json', 'w') as f:
+        json.dump(data, f, indent=4)
+
+    f.close()
+
+    user = ctx.author
+    await user.send(f'Syncing is complete! You can now use `mal:{username}` as a parameter.')
+
 dotenv.load_dotenv()
+CLIENT_ID = str(os.getenv("CLIENT_ID"))
 token = str(os.getenv("TOKEN"))
 bot.run(token)
