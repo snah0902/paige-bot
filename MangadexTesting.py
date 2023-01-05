@@ -60,7 +60,6 @@ def sync(username):
         if data == []:
             continue
         manga = data[0]
-        print(manga)
         if manga['attributes']['originalLanguage'] != 'ja':
             continue
         manga_id = manga['id']

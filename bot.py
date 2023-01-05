@@ -5,7 +5,6 @@ import dotenv
 import os
 import asyncio
 import json
-from PIL import Image
 
 def randomMangas(difficulty):
     base_url = "https://api.mangadex.org"
@@ -243,7 +242,7 @@ async def buttons(ctx, mangaTitles):
                 await self.roundWin(interaction)
             elif state == 'loss':
                 setRoundOutOfProgress(ctx)
-                await ctx.respond(f'No one got the correct answer! The correct answer was {correctManga}.')
+                await ctx.respond(f'No one got the correct answer! The correct answer was **{correctManga}**.')
             await self.message.edit(view=self)
 
         async def roundWin(self, interaction):
@@ -253,7 +252,7 @@ async def buttons(ctx, mangaTitles):
                 isWinner.append(interaction.user)
                 updateScore(interaction)
                 username = str(interaction.user)[:-5]
-                await ctx.respond(f'{username} has won!')
+                await ctx.respond(f'**{username}** has won!')
 
         async def buttonPressResponse(self, button, interaction):
             # correct choice -- round ends
@@ -357,14 +356,14 @@ def updateScore(interaction):
     
     f.close()
 
-def checkForValidMALs(ctx, myAnimeLists):
+def checkForValidMALs(myAnimeLists):
 
     with open('data.json') as f:
         data = json.load(f)
 
     malLists = myAnimeLists.split(',')
     for i in range(len(malLists)):
-        username = malLists[i].strip()
+        username = (malLists[i].strip()).lower()
 
         if username not in data['mal']:
             
@@ -405,7 +404,7 @@ async def pg(ctx, difficulty : int, mal : str):
 
     malUsers = []
     if mal != "":
-        malUsers = checkForValidMALs(ctx, mal)
+        malUsers = checkForValidMALs(mal)
         if isinstance(malUsers, tuple):
             error, username = malUsers
             if error == 'No user':
@@ -558,7 +557,7 @@ async def sync(ctx, username : str):
     with open('data.json') as f:
         data = json.load(f)
 
-    data['mal'][username] = mdexLst
+    data['mal'][username.lower()] = mdexLst
 
     with open('data.json', 'w') as f:
         json.dump(data, f, indent=4)
