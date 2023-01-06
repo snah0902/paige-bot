@@ -526,7 +526,7 @@ def myAnimeListRequest(mangaTitles, username, status):
 
     return mangaTitles
 
-@bot.command()
+@bot.command(description='Sync MyAnimeList manga list.')
 async def sync(ctx, username : str):
     await ctx.respond('The bot will DM you when sync is complete!')
     mangaTitles=[]
