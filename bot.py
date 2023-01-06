@@ -35,7 +35,7 @@ def randomMangas(difficulty):
         final_order_query[f"order[{key}]"] = value
 
     mangaTitles = []
-    for i in range(4):
+    while len(mangaTitles) < 4:
 
         startOffset = (difficulty-1)*250
         endOffset = difficulty*250
@@ -67,9 +67,13 @@ def randomMangas(difficulty):
         else:
             print('No valid title, retrying...')
             return (None, None)
-        mangaTitles.append(mangaTitle)
+
+        if mangaTitle in mangaTitles:
+            continue
+        else:
+            mangaTitles.append(mangaTitle)
         
-        if i == 0:
+        if len(mangaTitles) == 1:
             manga_id = manga['id']
 
     return manga_id, mangaTitles
