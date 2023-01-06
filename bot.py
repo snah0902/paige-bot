@@ -6,6 +6,10 @@ import os
 import asyncio
 import json
 
+#===============================================================================
+# Randomizing Manga
+#===============================================================================
+
 def randomMangas(difficulty):
     base_url = "https://api.mangadex.org"
 
@@ -159,6 +163,9 @@ def randomImg(difficulty, malUsers):
             fullURLs = randomPages(manga_id)
         return fullURLs, mangaTitles
 
+#===============================================================================
+# Starting up bot
+#===============================================================================
 
 bot = discord.Bot()
 
@@ -167,17 +174,9 @@ async def on_ready():
     setAllRoundsOutOfProgress()
     print(f'We have logged in as {bot.user}')
 
-@bot.command(description="Sends the bot's latency.") # this decorator makes a slash command
-async def ping(ctx): # a slash command will be created with the name "ping"
-    await ctx.respond(f"Pong! Latency is {bot.latency}")
-
-# parsing manga titles that are > 80 characters
-def shortenTitles(mangaTitles):
-    for i in range(len(mangaTitles)):
-        mangaTitle = mangaTitles[i]
-        if len(mangaTitle) > 80:
-            mangaTitles[i] = mangaTitle[:77] + '...'
-    return mangaTitles
+#===============================================================================
+# Embeds/Buttons
+#===============================================================================
 
 # returns difficulty name given difficulty
 def difficultyName(difficulty):
@@ -191,7 +190,6 @@ def difficultyName(difficulty):
         return 'Harder'
     elif difficulty == 5:
         return 'Insane'
-
 
 async def startEmbed(ctx, difficulty, malUsers):
     startEmbed = discord.Embed(
@@ -210,9 +208,7 @@ async def startEmbed(ctx, difficulty, malUsers):
 
     await ctx.respond(embed=startEmbed)
 
-numberOfGames = 0
-
-async def panelEmbed(ctx, difficulty, fullURL, mangaTitle):
+async def panelEmbed(ctx, fullURL, mangaTitle):
     panelEmbed = discord.Embed(
         title="Random Manga Panel",
         description="Guess the correct manga!",
@@ -230,6 +226,7 @@ async def buttons(ctx, mangaTitles):
     lostPlayers = set()
     isWinner = []
 
+    # initializing button class
     class MyView(discord.ui.View):
 
         async def changeButtonColors(self, state, interaction=None):
@@ -303,6 +300,10 @@ async def buttons(ctx, mangaTitles):
         
     await ctx.send(view=MyView(timeout=10))
 
+#===============================================================================
+# Updating playing guilds / leaderboard
+#===============================================================================
+
 def isRoundInProgress(ctx):
     with open('data.json') as f:
         data = json.load(f)
@@ -360,6 +361,10 @@ def updateScore(interaction):
     
     f.close()
 
+#===============================================================================
+# Bot commands
+#===============================================================================
+
 def checkForValidMALs(myAnimeLists):
 
     with open('data.json') as f:
@@ -384,6 +389,14 @@ def checkForValidMALs(myAnimeLists):
 
     f.close()
     return malLists
+
+# parsing manga titles that are > 80 characters
+def shortenTitles(mangaTitles):
+    for i in range(len(mangaTitles)):
+        mangaTitle = mangaTitles[i]
+        if len(mangaTitle) > 80:
+            mangaTitles[i] = mangaTitle[:77] + '...'
+    return mangaTitles
 
 @bot.command(description='Play a manga guessing game.')
 @discord.option(
@@ -430,7 +443,7 @@ async def pg(ctx, difficulty : int, mal : str):
         fullURL = fullURLs[0]
 
         
-        await panelEmbed(ctx, difficulty, fullURL, correctManga)
+        await panelEmbed(ctx, fullURL, correctManga)
         await buttons(ctx, mangaTitles)
 
     except:
@@ -457,6 +470,10 @@ async def score(ctx):
         score = data["score"][user]
         f.close()
         await ctx.respond(f"{user[:-5]} has gotten {score} manga correct!")
+
+@bot.command(description="Sends the bot's latency.")
+async def ping(ctx):
+    await ctx.respond(f"Pong! Latency is {bot.latency}")
 
 @bot.command(description="Sends top players.")
 async def top(ctx):
@@ -571,6 +588,8 @@ async def sync(ctx, username : str):
     user = ctx.author
     await user.send(f'Syncing is complete! You can now use `mal:{username}` as a parameter.')
 
+
+# Tokens
 dotenv.load_dotenv()
 CLIENT_ID = str(os.getenv("CLIENT_ID"))
 token = str(os.getenv("TOKEN"))
