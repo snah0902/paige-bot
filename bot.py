@@ -252,7 +252,7 @@ async def buttons(ctx, mangaTitles):
             else:
                 isWinner.append(interaction.user)
                 updateScore(interaction)
-                username = str(interaction.user)[:-5]
+                username = str(interaction.user)
                 await ctx.respond(f'**{username}** has won!')
 
         async def buttonPressResponse(self, button, interaction):
@@ -464,12 +464,12 @@ async def score(ctx):
 
     if user not in data["score"]:
         f.close()
-        await ctx.respond(f"{user[:-5]} has gotten 0 manga correct!")
+        await ctx.respond(f"{user} has gotten 0 manga correct!")
 
     else:
         score = data["score"][user]
         f.close()
-        await ctx.respond(f"{user[:-5]} has gotten {score} manga correct!")
+        await ctx.respond(f"{user} has gotten {score} manga correct!")
 
 @bot.command(description="Sends the bot's latency.")
 async def ping(ctx):
@@ -498,7 +498,7 @@ async def top(ctx):
     for i in range(10):
         if i < len(leaderboardList):
             score, user = leaderboardList[i]
-            leaderboard += f"\n`{i+1}` {user[:-5]} `{score}`"
+            leaderboard += f"\n`{i+1}` {user} `{score}`"
         else:
             leaderboard += f"\n`{i+1}` N/A `0`"
 
